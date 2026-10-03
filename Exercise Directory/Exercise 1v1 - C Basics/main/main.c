@@ -15,6 +15,7 @@
 void print_temperature(int temperature)
 {
     // TODO (Task 4)
+    printf("Current Temperature: %d\n", temperature);
 }
 
 
@@ -41,22 +42,29 @@ void app_main(void)
     // Task 1: change temperature to 100.
     // Expected: Temperature: 100
     printf("Task 1:\n");
-    int temperature = 75;
+    int temperature = 100;  // TODO (Task 1)
     printf("Temperature: %d\n", temperature);
 
     // Task 2: if temperature > 90, print "WARNING: Temperature is too high!"
     // Expected: the warning prints for 100, and not for 75.
     printf("\nTask 2:\n");
     // TODO (Task 2)
+    if (temperature > 90) {
+        printf("WARNING: Temperature is too high!\n");
+    }
 
     // Task 3: use a for loop to print 0 through 9, one per line.
     printf("\nTask 3:\n");
     // TODO (Task 3)
+    for (int i = 0; i < 10; i++) {
+        printf("%d\n", i);
+    }
 
     // Task 4: finish print_temperature(), then call it with 75.
     // Expected: Current Temperature: 75
     printf("\nTask 4:\n");
     // TODO (Task 4)
+    print_temperature(75);
 
     // Bonus 5: finish check_temperature(). Loop over temperatures and call
     // print_temperature() and check_temperature() on each value.
