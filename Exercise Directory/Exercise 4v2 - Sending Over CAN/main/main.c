@@ -19,8 +19,11 @@
 void send_rpm(int rpm)
 {
     // TODO (Task 2)
-
-    
+    uint8_t data[2];
+    data[0] = (uint8_t)(rpm >> 8);
+    data[1] = (uint8_t)(rpm & 0xFF);
+    CAN_message_t msg = build_packet_no_ext(RPM_ID, data, 2);
+    CAN_send(&msg, 100);
 }
 
 
@@ -33,12 +36,17 @@ void app_main(void)
     // Send it with a 100 ms timeout: CAN_send(&msg, 100);
     printf("Task 1:\n");
     // TODO (Task 1)
+    CAN_init();
+    uint8_t data[2] = {0xAA, 0xBB};
+    CAN_message_t msg = build_packet_no_ext(0x123, data, 2);
+    CAN_send(&msg, 100);
 
 
 
     // Task 2: finish send_rpm(), then send 3000 RPM.
     printf("\nTask 2:\n");
     // TODO (Task 2)
+    send_rpm(3000);
 
 
 
@@ -49,6 +57,12 @@ void app_main(void)
     // As you can reuse it build_packet_no_ext which takes in uint_8
     printf("\nTask 3:\n");
     // TODO (Task 3)
+    for (uint8_t i = 1; i <= 4; i++) {
+        uint8_t status_data[1] = {i};
+        CAN_message_t status_msg = build_packet_no_ext(STATUS_ID, status_data, 1);
+        CAN_send(&status_msg, 100);
+        vTaskDelay(pdMS_TO_TICKS(250));
+    }
 
 
 

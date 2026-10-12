@@ -76,7 +76,13 @@ void app_main(void)
     int start = now_ms();
     while (now_ms() - start < RUN_MS) {
         // TODO (Task 1)
-        
+        int current_reading = sim_button_read();
+        if (last_reading == 1 && current_reading == 0) {
+            printf("%d ms Press detected\n", now_ms());
+            polled_presses++;
+        }
+        last_reading = current_reading;
+        vTaskDelay(POLL_MS / portTICK_PERIOD_MS);
 
 
     }

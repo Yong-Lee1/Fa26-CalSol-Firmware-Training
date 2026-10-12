@@ -25,6 +25,11 @@ static int now_ms(void)
 void print_message(const CAN_message_t *msg)
 {
     // TODO (Task 1)
+    printf("ID 0x%03lX | DLC %d | ", msg->id, msg->dlc);
+    for (int i = 0; i < msg->dlc; i++) {
+        printf("%02X ", msg->data[i]);
+    }
+    printf("\n");
 
 
     
@@ -49,7 +54,7 @@ void app_main(void)
         if (CAN_receive(&msg, 50) == ESP_OK) {
             // Task 1: print every message with print_message(&msg)
             // TODO (Task 1)
-
+            print_message(&msg);
 
 
 
@@ -58,6 +63,10 @@ void app_main(void)
             // and print "  -> Motor RPM = <rpm>". Ignore every other ID.
             // Hint: this is 4v2's send_rpm() in reverse: (data[0] << 8) | data[1]
             // TODO (Task 2)
+            if (msg.id == RPM_ID) {
+                uint16_t rpm = (msg.data[0] << 8) | msg.data[1];
+                printf("  -> Motor RPM = %d\n", rpm);
+            }
 
 
 
@@ -65,12 +74,19 @@ void app_main(void)
             // Task 3 (part 1): if the message is a heartbeat, save the time in last_heartbeat.
             // Check if id == HEARTBEAT_ID
             // TODO (Task 3)
-
+            if (msg.id == HEARTBEAT_ID) {
+                last_heartbeat = now_ms();
+                heartbeat_lost = 0; // reset the lost state if we get a heartbeat
+            }
         }
 
         // Task 3 (part 2): if no heartbeat has arrived for HEARTBEAT_TIMEOUT_MS,
         // print "<time> ms Heartbeat lost!" and set teh state heartbeat_lost to 1 (So you don't repeatly trigger it)
         // TODO (Task 3)
+        if (!heartbeat_lost && (now_ms() - last_heartbeat > HEARTBEAT_TIMEOUT_MS)) {
+            printf("%d ms Heartbeat lost!\n", now_ms());
+            heartbeat_lost = 1;
+        }
 
 
     }

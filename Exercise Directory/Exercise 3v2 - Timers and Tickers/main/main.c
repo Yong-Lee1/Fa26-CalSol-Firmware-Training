@@ -40,7 +40,7 @@ static void set_led(int on)
 static void on_alarm(void *arg)
 {
     // TODO (Task 1)
-    
+    printf("%lld ms Alarm!\n", now_ms());
 
 }
 
@@ -50,7 +50,8 @@ static void on_alarm(void *arg)
 static void on_heartbeat(void *arg)
 {
     // TODO (Task 2)
-
+    heartbeat_count++;
+    printf("%lld ms Heartbeat %d\n", now_ms(), heartbeat_count);
 
 }
 
@@ -60,7 +61,7 @@ static void on_heartbeat(void *arg)
 static void on_blink(void *arg)
 {
     // TODO (Task 3)
-
+    set_led(!led_is_on);
 
 }
 
@@ -83,7 +84,7 @@ void app_main(void)
     printf("Task 1:\n");
     printf("%lld ms Timer started\n", now_ms());
     // TODO (Task 1)
-
+    esp_timer_start_once(alarm_timer, 1000000);
 
 
 
@@ -95,7 +96,10 @@ void app_main(void)
     // TODO (Task 2)
     // Reuse how timer are set up in Task 1
     // but use on_heartbeat() as your call back function this time!
-
+    esp_timer_handle_t heartbeat_timer;
+    esp_timer_create_args_t heartbeat_args = { .callback = on_heartbeat, .name = "heartbeat" };
+    esp_timer_create(&heartbeat_args, &heartbeat_timer);
+    esp_timer_start_periodic(heartbeat_timer, HEARTBEAT_MS * 1000);
 
 
 
@@ -107,7 +111,10 @@ void app_main(void)
     printf("\nTask 3:\n");
     // TODO (Task 3): create and start the blink timer, use on_blink as your call back this time!
     // Hint: This should be very similar to task 2
-
+    esp_timer_handle_t blink_timer;
+    esp_timer_create_args_t blink_args = { .callback = on_blink, .name = "blink" };
+    esp_timer_create(&blink_args, &blink_timer);
+    esp_timer_start_periodic(blink_timer, BLINK_MS * 1000);
 
 
 
@@ -118,7 +125,7 @@ void app_main(void)
     }
 
     // TODO (Task 3): stop the blink timer
-
+    esp_timer_stop(blink_timer);
 
 
     printf("\nDone!\n");

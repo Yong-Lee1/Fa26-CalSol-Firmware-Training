@@ -28,6 +28,9 @@ void set_led(int on)
 {
     // TODO (Task 2)
     // Hint: use %lld to print "long long int" in your print statement
+    gpio_set_level(HAZARDS_LED_GPIO, on);
+    led_is_on = on;
+    printf("%lld ms LED %s\n", now_ms(), on ? "ON" : "OFF");
 
 }
 
@@ -38,6 +41,8 @@ void app_main(void)
     // Use gpio_reset_pin(), then gpio_set_direction() with GPIO_MODE_OUTPUT.
     printf("Task 1:\n");
     // TODO (Task 1)
+    gpio_reset_pin(HAZARDS_LED_GPIO);
+    gpio_set_direction(HAZARDS_LED_GPIO, GPIO_MODE_OUTPUT);
 
 
 
@@ -48,6 +53,9 @@ void app_main(void)
     // Expected: LED ON, then LED OFF about 1000 ms later
     printf("\nTask 2:\n");
     // TODO (Task 2)
+    set_led(1);
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    set_led(0);
 
 
 
@@ -61,6 +69,12 @@ void app_main(void)
     // Expected: 10 lines (ON/OFF alternating), about 500 ms apart
     printf("\nTask 3:\n");
     // TODO (Task 3)
+    for (int i = 0; i < NUM_BLINKS; i++) {
+        set_led(1);
+        vTaskDelay(pdMS_TO_TICKS(BLINK_MS));
+        set_led(0);
+        vTaskDelay(pdMS_TO_TICKS(BLINK_MS));
+    }
 
 
 

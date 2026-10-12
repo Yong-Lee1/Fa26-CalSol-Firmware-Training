@@ -22,7 +22,7 @@ const int hazards_on[NUM_READINGS] = {0, 0, 1, 1, 0};  // 1 = on
 void uart_send(const char *text)
 {
     // TODO (Task 2)
-
+    uart_write_bytes(SERIAL_UART, text, strlen(text));
 
     
 }
@@ -35,6 +35,11 @@ void app_main(void)
     // Look for the names in the README table (for example UART_DATA_8_BITS).
     uart_config_t uart_config = {
         // TODO (Task 1)
+        .baud_rate = BAUD_RATE,
+        .data_bits = UART_DATA_8_BITS, 
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
 
         .source_clk = UART_SCLK_DEFAULT,
     };
@@ -42,6 +47,8 @@ void app_main(void)
     //   uart_driver_install(SERIAL_UART, 256, TX_BUFFER, 0, NULL, 0);
     //   uart_param_config(SERIAL_UART, &uart_config);
     // TODO (Task 1)
+    uart_driver_install(SERIAL_UART, 256, TX_BUFFER, 0, NULL, 0);
+    uart_param_config(SERIAL_UART, &uart_config);
 
     printf("Task 1:\n");
     printf("UART ready at %d baud\n", BAUD_RATE);
@@ -52,6 +59,7 @@ void app_main(void)
     printf("\nTask 2:\n");
     vTaskDelay(pdMS_TO_TICKS(100));
     // TODO (Task 2)
+    uart_send("Hello from the Brakelights ESP32!\r\n");
 
 
 
@@ -67,7 +75,12 @@ void app_main(void)
     char line[64];
     for (int i = 0; i < NUM_READINGS; i++) {
         // TODO (Task 3)
-        
+        snprintf(line, sizeof(line), "Pedal: %d | Power: %d.%d V | Hazards: %s\r\n", 
+                 pedal_positions[i], 
+                 power_x10[i] / 10, 
+                 power_x10[i] % 10, 
+                 hazards_on[i] ? "ON" : "OFF");
+        uart_send(line);
 
 
         vTaskDelay(pdMS_TO_TICKS(500));

@@ -20,7 +20,19 @@ uint8_t spi_transfer_byte(uint8_t out)
 {
     uint8_t in = 0;
     // TODO (Task 1)
+    for (int bit = 7; bit >= 0; bit--) {
+        // Step 1: Put the bit on MOSI
+        spi_mosi((out >> bit) & 1);
 
+        // Step 2: Rising edge
+        spi_sclk(1);
+
+        // Step 3: Read MISO and add it to the end of `in`
+        in = (in << 1) | spi_miso();
+
+        // Step 4: Falling edge
+        spi_sclk(0);
+    }
     
 
     return in;
@@ -33,8 +45,8 @@ uint8_t spi_transfer_byte(uint8_t out)
 void dac_set(int value)
 {
     // TODO (Task 2) - Fill in byte1 and byte2, this is to practice your bits manipulation
-    uint8_t byte1 = 0x00;  // settings bits + top 4 bits of value
-    uint8_t byte2 = 0x00;  // bottom 8 bits of value
+    uint8_t byte1 = (DAC_READ_CMD << 4) | ((value >> 8) & 0x0F);  // settings bits + top 4 bits of value
+    uint8_t byte2 = value & 0xFF;  // bottom 8 bits of value
 
     spi_cs(0);
     spi_transfer_byte(byte1);
@@ -52,10 +64,13 @@ void dac_set(int value)
 int dac_read(void)
 {
     // TODO (Task 3)
+    spi_cs(0);
+    spi_transfer_byte(DAC_READ_CMD);
+    uint8_t first = spi_transfer_byte(0x00);
+    uint8_t second = spi_transfer_byte(0x00);
+    spi_cs(1);
 
-
-
-    return 0;
+    return (first << 4) | (second >> 4);
 }
 
 
@@ -73,15 +88,30 @@ void app_main(void)
     // Expected: [DAC] Output set to 2048 (1.65 V) and so on
     printf("\nTask 2:\n");
     // TODO (Task 2)
+    
+    dac_set(0);
+    vTaskDelay(200 / portTICK_PERIOD_MS);
+    dac_set(1024);
+    vTaskDelay(200 / portTICK_PERIOD_MS);
+    dac_set(2048);
+    vTaskDelay(200 / portTICK_PERIOD_MS);
+    dac_set(3072);
+    vTaskDelay(200 / portTICK_PERIOD_MS);
+    dac_set(4095);
+    vTaskDelay(200 / portTICK_PERIOD_MS);
 
     const int steps[] = {0, 1024, 2048, 3072, 4095};
+
 
 
     // Task 3: finish dac_read(), set the DAC to 2500, then read it back and print it.
     // Expected: Read back: 2500
     printf("\nTask 3:\n");
     // TODO (Task 3)
-
+    dac_set(2500);
+    vTaskDelay(200 / portTICK_PERIOD_MS);
+    int readback = dac_read();
+    printf("Read back: %d\n", readback);
 
 
     printf("\nDone!\n");
