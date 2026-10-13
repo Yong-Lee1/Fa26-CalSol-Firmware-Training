@@ -27,7 +27,7 @@
 
 // State definitions
 typedef enum {
-    SYS_STATE_IDLE = 0,
+    SYS_STATE_IDLE,
     SYS_STATE_ACTIVE,
 } system_state_t;
 
@@ -55,20 +55,17 @@ static const char *MORSE_ALPHABET[] = {
 };
 
 
-// --- TASK & QUEUE HANDLES ---
+// queue for button press events, timer for the idle blink
 static QueueHandle_t button_queue = NULL;
 static TimerHandle_t idle_blink_timer = NULL;
-static adc_oneshot_unit_handle_t adc_handle = NULL;
-// Worker handles managed by Partner 2's FSM
-TaskHandle_t hazard_task_handle = NULL;
+static adc_oneshot_unit_handle_t adc_handle = NULL; // handle for the potentiometer ADC
+TaskHandle_t hazard_task_handle = NULL; // need handles so the FSM can suspend/resume these
 TaskHandle_t pot_task_handle = NULL;
-// Partner 1's tasks (externally declared or shared)
-TaskHandle_t can_rx_task_handle;
+TaskHandle_t can_rx_task_handle; // partner 1's task handles, declared extern in their file
 TaskHandle_t can_tx_task_handle;
 TaskHandle_t i2c_task_handle;
-// ==========================================
-// TODO 1: GPIO & LEDC PWM INITIALIZATION
-// ==========================================
+
+// sets up the active and hazard LEDs as outputs, starts them off
 void init_gpio_outputs(void) {
     gpio_reset_pin(ACTIVE_LED_GPIO);
     gpio_reset_pin(HAZARD_LED_GPIO);
@@ -77,8 +74,9 @@ void init_gpio_outputs(void) {
     gpio_set_level(ACTIVE_LED_GPIO, 0);
     gpio_set_level(HAZARD_LED_GPIO, 0);
 }
+
+// configures LEDC timer and two PWM channels — one for pedal LED, one for pot LED
 void init_ledc_pwm(void) {
-    // TODO: Configure ledc_timer_config_t (5kHz, 8-bit, LOW_SPEED_MODE)
     ledc_timer_config_t ledc_timer = {
         .speed_mode = LEDC_LOW_SPEED_MODE,
         .timer_num = LEDC_TIMER_0,
@@ -88,7 +86,6 @@ void init_ledc_pwm(void) {
     };
     ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
 
-    // TODO: Configure Channel 0 on PEDAL_LED_GPIO
     ledc_channel_config_t pedal_channel = {
         .gpio_num = PEDAL_LED_GPIO,
         .speed_mode = LEDC_LOW_SPEED_MODE,
@@ -100,7 +97,6 @@ void init_ledc_pwm(void) {
     };
     ESP_ERROR_CHECK(ledc_channel_config(&pedal_channel));
 
-    // TODO: Configure Channel 1 on POT_LED_GPIO
     ledc_channel_config_t pot_channel = {
         .gpio_num = POT_LED_GPIO,
         .speed_mode = LEDC_LOW_SPEED_MODE,
@@ -112,39 +108,38 @@ void init_ledc_pwm(void) {
     };
     ESP_ERROR_CHECK(ledc_channel_config(&pot_channel));
 }
+
+// just wraps ledc_set_duty for the pedal LED on channel 0
 void set_pedal_led_brightness(uint8_t duty) {
     ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, duty);
     ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
 }
+
+// same thing but for the pot LED on channel 1
 void set_pot_led_brightness(uint8_t duty) {
     ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1, duty);
     ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1);
 }
-// ==========================================
-// TODO 2: ADC ONE-SHOT INITIALIZATION
-// ==========================================
+
+// initializes ADC unit 1 and configures the pot channel with 12dB attenuation (0-3.3V range)
 void init_pot_adc(void) {
-    // TODO: Call adc_oneshot_new_unit() on ADC_UNIT_1
     adc_oneshot_unit_init_cfg_t init_config = {
         .unit_id = ADC_UNIT_1,
         .ulp_mode = ADC_ULP_MODE_DISABLE
     };
     ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config, &adc_handle));
 
-    // TODO: Call adc_oneshot_config_channel() for POT_ADC_CHANNEL with ADC_ATTEN_DB_12
     adc_oneshot_chan_cfg_t channel_config = {
         .atten = ADC_ATTEN_DB_12,
         .bitwidth = ADC_BITWIDTH_DEFAULT
     };
     ESP_ERROR_CHECK(adc_oneshot_config_channel(adc_handle, POT_ADC_CHANNEL, &channel_config));
 }
-// ==========================================
-// TODO 3: BUTTON ISR & DEBOUNCING
-// ==========================================
+
+// ISR fires on falling edge (button press), debounces to 200ms so we don't get repeat events
 static void IRAM_ATTR button_isr_handler(void *arg) {
     static int64_t last_press_time = 0;
-    int64_t now = esp_timer_get_time(); // Microseconds
-    // Debounce: 200 ms (200000 us)
+    int64_t now = esp_timer_get_time();
     if (now - last_press_time > 200000) {
         last_press_time = now;
         uint32_t event = 1;
@@ -152,7 +147,6 @@ static void IRAM_ATTR button_isr_handler(void *arg) {
     }
 }
 void init_button_input(void) {
-    // TODO: Configure BUTTON_GPIO with internal pull-up and GPIO_INTR_NEGEDGE
     gpio_config_t button_config = {
         .pin_bit_mask = (1ULL << BUTTON_GPIO),
         .mode = GPIO_MODE_INPUT,
@@ -161,14 +155,10 @@ void init_button_input(void) {
         .intr_type = GPIO_INTR_NEGEDGE
     };
     ESP_ERROR_CHECK(gpio_config(&button_config));
-    // TODO: Call gpio_install_isr_service(0)
     ESP_ERROR_CHECK(gpio_install_isr_service(0));
-    // TODO: Call gpio_isr_handler_add(BUTTON_GPIO, button_isr_handler, NULL)
     ESP_ERROR_CHECK(gpio_isr_handler_add(BUTTON_GPIO, button_isr_handler, NULL));
 }
-// ==========================================
-// TODO 4: TASKS & TIMERS
-// ==========================================
+
 void hazard_led_task(void *arg) {
     while (1) {
         if (g_context.hazards_enabled) {
@@ -185,14 +175,10 @@ void hazard_led_task(void *arg) {
 void bonus_pot_task(void *arg) {
     int raw_val = 0;
     while (1) {
-        // TODO: Read ADC with adc_oneshot_read(adc_handle, POT_ADC_CHANNEL, &raw_val)
         esp_err_t ret = adc_oneshot_read(adc_handle, POT_ADC_CHANNEL, &raw_val);
         if (ret == ESP_OK) {
-            // TODO: Shift 12-bit to 8-bit: uint8_t duty = raw_val >> 4;
             uint8_t duty = (uint8_t)(raw_val >> 4);
-            // TODO: Update PWM via set_pot_led_brightness(duty);
             set_pot_led_brightness(duty);
-            // TODO: Print reading to Serial
             ESP_LOGI(TAG, "Potentiometer ADC Reading: %d, Duty Cycle: %d", raw_val, duty);
         } else {
             ESP_LOGE(TAG, "Failed to read potentiometer ADC. Error: %s", esp_err_to_name(ret));
@@ -203,7 +189,6 @@ void bonus_pot_task(void *arg) {
 }
 
 static void idle_blink_callback(TimerHandle_t xTimer) {
-    // TODO: Toggle ACTIVE_LED_GPIO (or cycle colors for bonus)
     static int s_led_level = false;
     s_led_level = !s_led_level;
     gpio_set_level(ACTIVE_LED_GPIO, s_led_level);
@@ -216,7 +201,7 @@ static void morse_pulse(int duration_ms) {
     vTaskDelay(pdMS_TO_TICKS(MORSE_DOT_MS)); // Inter-element gap
 }
 
-// Morse code helper
+// walks through each character in the string and flashes the correct dot/dash pattern
 static void play_morse_string(const char *str) {
     for (int i = 0; str[i] != '\0'; i++) {
         char c = toupper(str[i]);
@@ -237,27 +222,25 @@ static void play_morse_string(const char *str) {
     }
 }
 
-// Morse code function
+// runs the morse sequence then notifies the supervisor it's done so it can continue
 void morse_code_task(void *arg) {
     TaskHandle_t supervisor_handle = (TaskHandle_t)arg;
 
-    const char *message = "Yong and June"; // Example message
+    const char *message = "Yong and June";
 
     ESP_LOGI(TAG, "Morse: Playing name: %s", message);
     play_morse_string(message);
     ESP_LOGI(TAG, "Done");
 
-    xTaskNotifyGive(supervisor_handle); // Notify the supervisor task that Morse code is done
+    xTaskNotifyGive(supervisor_handle);
 
     while (1) {
-        vTaskDelay(portMAX_DELAY); // Suspend this task indefinitely
+        vTaskDelay(portMAX_DELAY);
     }
 }
 
 
-// ==========================================
-// TODO 5: FSM SUPERVISOR TASK
-// ==========================================
+// blocks on the button queue; transitions between IDLE and ACTIVE and handles all the suspend/resume logic
 void fsm_supervisor_task(void *arg) {
     uint32_t event;
     while (1) {
@@ -272,9 +255,9 @@ void fsm_supervisor_task(void *arg) {
                 morse_task_handle = NULL; // Reset handle to NULL after deletion
                 
                 xTimerStop(idle_blink_timer, 0);
-                gpio_set_level(ACTIVE_LED_GPIO, 1); // Solid Green
+                gpio_set_level(ACTIVE_LED_GPIO, 1); // solid on while active
                 g_context.state = SYS_STATE_ACTIVE;
-                // Resume tasks
+                // resume all the worker tasks
                 if (hazard_task_handle) vTaskResume(hazard_task_handle);
                 if (pot_task_handle) vTaskResume(pot_task_handle);
                 if (can_rx_task_handle) vTaskResume(can_rx_task_handle);
@@ -283,127 +266,52 @@ void fsm_supervisor_task(void *arg) {
             } else {
                 ESP_LOGI(TAG, "Transitioning to IDLE");
                 g_context.state = SYS_STATE_IDLE;
-                // Suspend tasks
+                // suspend everything so nothing is running while idle
                 if (hazard_task_handle) vTaskSuspend(hazard_task_handle);
                 if (pot_task_handle) vTaskSuspend(pot_task_handle);
                 if (can_rx_task_handle) vTaskSuspend(can_rx_task_handle);
                 if (can_tx_task_handle) vTaskSuspend(can_tx_task_handle);
                 if (i2c_task_handle) vTaskSuspend(i2c_task_handle);
-                // Set safe outputs
+                // make sure all outputs are off/safe before going idle
                 set_pedal_led_brightness(0);
                 set_pot_led_brightness(0);
                 gpio_set_level(HAZARD_LED_GPIO, 0);
-                // Start idle blink
-                xTimerStart(idle_blink_timer, 0);
+                xTimerStart(idle_blink_timer, 0); // start blinking active LED to show we're idle
             }
         }
     }
 }
 
-// ==========================================
-// ENTRY POINT: app_main
-// ==========================================
+// app_main is the entry point — sets up everything then hands off to the scheduler
 void app_main(void)
 {
     ESP_LOGI(TAG, "Booting Brakelights ESP32 into IDLE state...");
 
-    // 1. Create OS Primitives (Queue & Software Timer)
+    // create the button queue and the idle blink timer before anything else
     button_queue = xQueueCreate(5, sizeof(uint32_t));
     idle_blink_timer = xTimerCreate(
         "idle_blink",
         pdMS_TO_TICKS(500),
-        pdTRUE,                 // Auto-reload (repeating timer)
+        pdTRUE,                 // auto-reload so it keeps repeating
         NULL,
         idle_blink_callback
     );
 
-    // 2. Initialize Hardware Peripherals
+    // initialize all the hardware peripherals
     init_gpio_outputs();
-    init_ledc_pwm();      // (Uncomment when you write TODO 1)
-    init_pot_adc();       // (Uncomment when you write TODO 2)
-    init_button_input();  // (Uncomment when you write TODO 3)
+    init_ledc_pwm();
+    init_pot_adc();
+    init_button_input();
 
-    // 3. Create Supervisory & Worker Tasks
+    // spin up the supervisor and worker tasks
     xTaskCreate(fsm_supervisor_task, "fsm_supervisor", 3072, NULL, 3, NULL);
     xTaskCreate(hazard_led_task, "hazard_task", 2048, NULL, 2, &hazard_task_handle);
     xTaskCreate(bonus_pot_task, "bonus_pot", 2048, NULL, 1, &pot_task_handle);
 
-    // 4. Start in IDLE: suspend worker tasks and start idle blink
+    // start in IDLE — suspend the workers and kick off the idle blink
     vTaskSuspend(hazard_task_handle);
     xTimerStart(idle_blink_timer, 0);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
